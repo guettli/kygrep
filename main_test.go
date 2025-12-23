@@ -117,3 +117,149 @@ func TestFlattenArrayWithPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestUnflatten(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+	}{
+		{
+			name: "simple map",
+			lines: []string{
+				"key1 = value1",
+				"key2 = value2",
+			},
+		},
+		{
+			name: "nested map",
+			lines: []string{
+				"outer.inner = value",
+			},
+		},
+		{
+			name: "array",
+			lines: []string{
+				"items[0] = a",
+				"items[1] = b",
+				"items[2] = c",
+			},
+		},
+		{
+			name: "complex nested structure",
+			lines: []string{
+				"level1.level2.level3 = value",
+			},
+		},
+		{
+			name: "mixed types",
+			lines: []string{
+				"string = text",
+				"number = 42",
+				"bool = true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Unflatten the lines
+			result, err := unflatten(tt.lines)
+			if err != nil {
+				t.Errorf("unflatten error: %v", err)
+				return
+			}
+
+			// Flatten again to compare
+			var flattened []string
+			flatten(result, "", &flattened)
+
+			// Create maps for comparison (order doesn't matter)
+			expectedMap := make(map[string]bool)
+			for _, line := range tt.lines {
+				expectedMap[line] = true
+			}
+
+			resultMap := make(map[string]bool)
+			for _, line := range flattened {
+				resultMap[line] = true
+			}
+
+			// Check all expected lines are present
+			for line := range expectedMap {
+				if !resultMap[line] {
+					t.Errorf("expected line not found after round-trip: %s", line)
+				}
+			}
+		})
+	}
+}
+
+func TestParsePath(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected []interface{}
+	}{
+		{
+			path:     "simple",
+			expected: []interface{}{"simple"},
+		},
+		{
+			path:     "nested.path",
+			expected: []interface{}{"nested", "path"},
+		},
+		{
+			path:     "array[0]",
+			expected: []interface{}{"array", 0},
+		},
+		{
+			path:     "complex.array[0].field",
+			expected: []interface{}{"complex", "array", 0, "field"},
+		},
+		{
+			path:     "multi[0][1]",
+			expected: []interface{}{"multi", 0, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := parsePath(tt.path)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d tokens, got %d", len(tt.expected), len(result))
+				return
+			}
+
+			for i, expected := range tt.expected {
+				if result[i] != expected {
+					t.Errorf("token %d: expected %v (type %T), got %v (type %T)",
+						i, expected, expected, result[i], result[i])
+				}
+			}
+		})
+	}
+}
+
+func TestParseValue(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"42", int64(42)},
+		{"3.14", 3.14},
+		{"true", true},
+		{"false", false},
+		{"text", "text"},
+		{"hello world", "hello world"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := parseValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("expected %v (type %T), got %v (type %T)",
+					tt.expected, tt.expected, result, result)
+			}
+		})
+	}
+}
